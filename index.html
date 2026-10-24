@@ -43,6 +43,9 @@ body{font-family:var(--font-body);color:var(--paper);-webkit-user-select:none;us
 .btn.hold.on{color:#0b2b12;background:linear-gradient(#7ee08a,#2f9d49);border-color:#1c6b2e;box-shadow:0 2px 0 #1c6b2e;transform:translateY(4px)}
 .btn.big{height:92px;padding:0 44px;font-size:34px}
 .overlay .btn{flex:none}
+.overlay .btn.wood{height:72px;padding:0 36px;font-size:26px;color:var(--paper);background:var(--wood);border:3px solid var(--wood-dark);box-shadow:0 5px 0 var(--wood-dark)}
+.cplist{display:grid;gap:12px;width:100%;max-width:440px}
+.cplist .btn{height:72px;font-size:26px;padding:0 20px}
 
 .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:36px 32px;background:rgba(10,16,12,.86);text-align:center;overflow:auto}
 .overlay h1{font-family:var(--font-disp);font-weight:900;font-size:72px;line-height:1.05;margin:0;color:var(--gold);text-shadow:0 5px 0 var(--wood-dark),0 0 30px rgba(243,200,75,.25);text-wrap:balance}
@@ -159,8 +162,16 @@ body{font-family:var(--font-body);color:var(--paper);-webkit-user-select:none;us
     <div><span class="k">🗺</span><span><b>ボスを倒すとマップが広がり</b>、新しい門と道ができる。ドラッグで見る場所を動かし、＋－やピンチで拡大縮小。</span></div>
     <div><span class="k">🏰</span><span><b>城</b>か<b>勇者</b>の体力がゼロになったら終わり。城のそばにいると勇者は回復する。</span></div>
    </div>
-   <button class="btn hold big" id="startBtn" type="button">はじめる</button>
+   <button class="btn hold big" id="startBtn" type="button">最初からスタート</button>
+   <button class="btn wood" id="contBtn" type="button" hidden>⏩ 続きからスタート</button>
    <p class="best" id="titleBest"></p>
+  </div>
+
+  <div id="cont" class="overlay" hidden>
+   <h2>続きからスタート</h2>
+   <p class="sub">ボスを倒したWAVEから始められる。所持金はその時までに手に入れた額の8割、強化と建物は1から。</p>
+   <div class="cplist" id="cpList"></div>
+   <button class="btn wood" id="contBack" type="button">もどる</button>
   </div>
 
   <div id="over" class="overlay" hidden>
@@ -170,7 +181,8 @@ body{font-family:var(--font-body);color:var(--paper);-webkit-user-select:none;us
     <div>倒した敵<b id="overKills">0</b>体</div>
    </div>
    <p class="best" id="overBest"></p>
-   <button class="btn hold big" id="retryBtn" type="button">もう一度</button>
+   <button class="btn hold big" id="retryBtn" type="button">最初からスタート</button>
+   <button class="btn wood" id="contBtn2" type="button" hidden>⏩ 続きからスタート</button>
   </div>
  </div>
 </div>
@@ -377,6 +389,10 @@ function planPath(){
 // ---- ゲームの状態 ----
 var S={screen:'title', wave:0, coins:0, kills:0, time:0, waveState:'clear', spawnQueue:[], spawnTimer:0, best:0, shopOpen:false, buildOpen:false};
 S.best=parseInt(store('sas_best')||'0',10)||0;
+// チェックポイント: ボスを倒したWAVEごとに「そこまでに手に入れたコインの8割」を保存（{wave: coins}。同じWAVEは多い方を残す）
+var cps={}; try{ cps=JSON.parse(store('sas_cp')||'{}')||{}; }catch(e){ cps={}; }
+function saveCp(w){ var v=Math.round((S.earned||0)*0.8); if(!(cps[w]>=v)) cps[w]=v; store('sas_cp',JSON.stringify(cps)); paintCont(); }
+function cpWaves(){ return Object.keys(cps).map(Number).filter(function(w){return w>0;}).sort(function(a,b){return b-a;}); }
 var hero={x:720,y:1790,r:20,hp:120,maxHp:120,speed:230,range:230,dmg:10,fireRate:2,cool:0,arrows:1,pierce:0,magnet:90,regen:5,dest:null,path:null,face:1,flash:0,target:null};
 var castle={x:cx(CASTLE_C)+TILE/2,y:cx(CASTLE_R)+TILE/2,r:62,hp:600,maxHp:600,flash:0};
 var enemies=[], shots=[], coins=[], texts=[], parts=[];
@@ -512,18 +528,23 @@ var sfx={
 };
 
 // ---- ゲーム開始・ウェーブ ----
-function newGame(){
+function newGame(from){ // from: 続きから始めるWAVE（5の倍数。省略なら最初から）
   resetMap();
   hero.x=castle.x; hero.y=castle.y-130; hero.hp=120; hero.maxHp=120; hero.speed=230; hero.range=230; hero.dmg=10; hero.fireRate=2; hero.cool=0;
   hero.arrows=1; hero.pierce=0; hero.magnet=90; hero.regen=5; hero.dest=null; hero.path=null; hero.face=1; hero.flash=0; hero.target=null;
   castle.hp=600; castle.maxHp=600; castle.flash=0;
   enemies.length=0; shots.length=0; coins.length=0; texts.length=0; parts.length=0;
-  S.wave=0; S.coins=40; S.kills=0; S.time=0; S.waveState='clear'; S.spawnQueue=[]; S.spawnTimer=0; S.escapes=0; S.maxWaveDur=0; levels={};
+  S.wave=0; S.coins=40; S.earned=40; S.kills=0; S.time=0; S.waveState='clear'; S.spawnQueue=[]; S.spawnTimer=0; S.escapes=0; S.maxWaveDur=0; levels={};
+  if(from && cps[from]){
+    for(var w=5; w<=from; w+=5) expandMap(); // ボス撃破ぶんのマップ拡張を先に済ませる（道の形は毎回ランダム）
+    S.wave=from; S.coins=cps[from]; S.earned=S.coins;
+  } else from=0;
   go=false; closeShop(); closeBuild(); closeMenu(); placing=null; paintPlacing();
   cam.x=castle.x; cam.y=(region.r0*TILE+(region.r1+1)*TILE)/2; cam.zoom=1; camFollow=true; clampCam();
   S.screen='play';
-  $('title').hidden=true; $('over').hidden=true;
-  showBanner('▶ かスペースで開始！','タップで移動先。🛠で砦や壁を建てられる');
+  $('title').hidden=true; $('over').hidden=true; $('cont').hidden=true;
+  if(from) showBanner('WAVE '+from+' から再開！','🪙 '+S.coins+'　強化や砦を整えてから ▶ で WAVE '+(from+1), true);
+  else showBanner('▶ かスペースで開始！','タップで移動先。🛠で砦や壁を建てられる');
 }
 function hpMult(n){ return (1+0.12*(n-1))*Math.pow(1.045,n-1); }
 function dmgMult(n){ return (1+0.05*(n-1))*Math.pow(1.03,n-1); }
@@ -552,7 +573,8 @@ function spawnEnemy(type){
 }
 function waveClear(){
   var sum=0; for(var i=0;i<coins.length;i++) sum+=coins[i].v; coins.length=0;
-  var bonus=5+2*S.wave; S.coins+=sum+bonus;
+  var bonus=5+2*S.wave; S.coins+=sum+bonus; S.earned=(S.earned||0)+sum+bonus;
+  if(S.wave%5===0) saveCp(S.wave); // ボス撃破＝チェックポイント
   S.maxWaveDur=Math.max(S.maxWaveDur||0, S.time-(S.waveT0||0));
   // ウェーブクリアで城と建物（砦・壁）は全回復。勇者は回復しない（城のそばで回復する）
   castle.hp=castle.maxHp;
@@ -568,6 +590,7 @@ function gameOver(){
   $('overTitle').textContent=castle.hp<=0?'城が落ちた…':'勇者が倒れた…';
   $('overWave').textContent=S.wave; $('overKills').textContent=S.kills;
   $('overBest').textContent='ベスト WAVE '+S.best;
+  paintCont();
   $('over').hidden=false; $('banner').hidden=true;
   sfx.over();
 }
@@ -800,7 +823,7 @@ function updateCoins(dt){
     if(d<hero.magnet){
       var pull=(c.age<0.25?0:1)*(460+hero.speed), dx=hero.x-c.x, dy=hero.y-c.y, dd=d||1;
       c.x+=dx/dd*pull*dt; c.y+=dy/dd*pull*dt;
-      if(d<22){ S.coins+=c.v; addText(hero.x,hero.y-40,'+'+c.v,'#ffd84a'); sfx.coin(); coins.splice(i,1); continue; }
+      if(d<22){ S.coins+=c.v; S.earned=(S.earned||0)+c.v; addText(hero.x,hero.y-40,'+'+c.v,'#ffd84a'); sfx.coin(); coins.splice(i,1); continue; }
     }else{
       c.vx*=k; c.vy*=k; c.x+=c.vx*dt; c.y+=c.vy*dt;
       c.x=clamp(c.x,region.c0*TILE+12,(region.c1+1)*TILE-12); c.y=clamp(c.y,region.r0*TILE+12,(region.r1+1)*TILE-12);
@@ -1186,6 +1209,23 @@ $('buildBtn').addEventListener('click',function(){ ensureAudio(); if(placing){ p
 $('buildClose').addEventListener('click',closeBuild);
 $('startBtn').addEventListener('click',function(){ ensureAudio(); newGame(); });
 $('retryBtn').addEventListener('click',function(){ ensureAudio(); newGame(); });
+// 続きから: チェックポイントの一覧（新しいWAVEが上）
+var contFrom='title';
+function paintCont(){ var has=cpWaves().length>0; $('contBtn').hidden=!has; $('contBtn2').hidden=!has; }
+function openCont(fromId){
+  contFrom=fromId; var list=$('cpList'); list.innerHTML='';
+  cpWaves().forEach(function(w){
+    var b=document.createElement('button'); b.type='button'; b.className='btn hold';
+    b.textContent='WAVE '+w+' から　🪙 '+cps[w];
+    b.addEventListener('click',function(){ ensureAudio(); newGame(w); });
+    list.appendChild(b);
+  });
+  $(fromId).hidden=true; $('cont').hidden=false;
+}
+$('contBtn').addEventListener('click',function(){ ensureAudio(); openCont('title'); });
+$('contBtn2').addEventListener('click',function(){ ensureAudio(); openCont('over'); });
+$('contBack').addEventListener('click',function(){ $('cont').hidden=true; $(contFrom).hidden=false; });
+paintCont();
 var muteBtn=$('muteBtn');
 function paintMute(){ muteBtn.textContent=muted?'🔇':'🔊'; }
 muteBtn.addEventListener('click',function(){ muted=!muted; store('sas_mute',muted?'1':'0'); paintMute(); ensureAudio(); if(!muted) sfx.coin(); });
@@ -1245,10 +1285,11 @@ function botThink(){
   if(!hero.dest || dist(hero.dest,want2)>45) setDest(want2);
 }
 function runAuto(){
-  newGame();
+  var from=parseInt(qs.get('from'),10)||0; // &from=20&cp=300 で「WAVE20から・所持金300」の続きプレイを試す
+  if(from){ cps[from]=parseInt(qs.get('cp'),10)||200; newGame(from); } else newGame();
   var secs=parseFloat(qs.get('secs')||'600'), dt=1/60, t=0;
   while(t<secs && S.screen==='play'){ botThink(); update(dt); t+=dt; }
-  var out='AUTO wave='+S.wave+' screen='+S.screen+' time='+t.toFixed(0)+' kills='+S.kills+' hero='+Math.round(hero.hp)+'/'+hero.maxHp+' castle='+Math.round(castle.hp)+'/'+castle.maxHp+' coins='+S.coins+' forts='+fortCount()+' fortLvMax='+buildList.reduce(function(m,b){return b.type==='fort'?Math.max(m,b.lv):m;},0)+'/'+fortMaxLv()+' gates='+gates.length+' stage='+mapStage+' maxWaveDur='+Math.round(S.maxWaveDur||0)+' enemiesLeft='+enemies.length+' escapes='+(S.escapes||0)+' levels='+JSON.stringify(levels);
+  var out='AUTO wave='+S.wave+' screen='+S.screen+' time='+t.toFixed(0)+' kills='+S.kills+' hero='+Math.round(hero.hp)+'/'+hero.maxHp+' castle='+Math.round(castle.hp)+'/'+castle.maxHp+' coins='+S.coins+' forts='+fortCount()+' fortLvMax='+buildList.reduce(function(m,b){return b.type==='fort'?Math.max(m,b.lv):m;},0)+'/'+fortMaxLv()+' gates='+gates.length+' stage='+mapStage+' maxWaveDur='+Math.round(S.maxWaveDur||0)+' enemiesLeft='+enemies.length+' escapes='+(S.escapes||0)+' earned='+(S.earned||0)+' cps='+JSON.stringify(cps)+' levels='+JSON.stringify(levels);
   document.title=out;
   var pre=document.createElement('pre'); pre.id='simout'; pre.textContent=out; pre.style.cssText='position:fixed;left:0;top:0;z-index:99;background:#000;color:#0f0;font-size:12px;margin:0'; document.body.appendChild(pre);
   if(qs.has('shot')){ $('over').hidden=true; S.screen='play'; if(qs.has('zoom')) setZoom(parseFloat(qs.get('zoom'))); if(qs.get('shot')==='run') go=true; requestAnimationFrame(frame); }
