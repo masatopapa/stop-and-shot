@@ -576,6 +576,8 @@ function waveClear(){
   var bonus=5+2*S.wave; S.coins+=sum+bonus; S.earned=(S.earned||0)+sum+bonus;
   if(S.wave%5===0) saveCp(S.wave); // ボス撃破＝チェックポイント
   S.maxWaveDur=Math.max(S.maxWaveDur||0, S.time-(S.waveT0||0));
+  // 飛んでいる敵の矢・火球は消す（止まったまま次のウェーブで当たらないように。回復より先に）
+  for(i=shots.length-1;i>=0;i--){ if(!shots[i].friendly){ burst(shots[i].x,shots[i].y,3,shots[i].fire?'#ff7a3a':'#ddd'); shots.splice(i,1); } }
   // ウェーブクリアで城と建物（砦・壁）は全回復。勇者は回復しない（城のそばで回復する）
   castle.hp=castle.maxHp;
   for(i=0;i<buildList.length;i++) buildList[i].hp=buildList[i].maxHp;
