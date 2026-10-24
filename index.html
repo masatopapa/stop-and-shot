@@ -108,7 +108,7 @@ body{font-family:var(--font-body);color:var(--paper);-webkit-user-select:none;us
   <div id="hint"></div>
   <div id="bottom">
    <button class="btn wood" id="shopBtn" type="button">🛒 強化</button>
-   <button class="btn hold" id="holdBtn" type="button">▶ 押している間 進む</button>
+   <button class="btn hold" id="holdBtn" type="button">▶ 進む</button>
    <button class="btn wood" id="buildBtn" type="button">🛠 建てる</button>
   </div>
   <div id="placing" hidden><span id="placingText"></span><button class="cancel" id="placingCancel" type="button">やめる</button></div>
@@ -153,7 +153,7 @@ body{font-family:var(--font-body);color:var(--paper);-webkit-user-select:none;us
    <p class="sub">時間を止めて考える、タワーディフェンス</p>
    <div class="howto">
     <div><span class="k">👆</span><span><b>タップ／クリック</b>で勇者の移動先を決める。時間は止まったまま。</span></div>
-    <div><span class="k">⏯</span><span><b>画面を長押し</b>（PCは<b>スペースキー</b>）している間だけ、時間が進む。</span></div>
+    <div><span class="k">⏯</span><span><b>▶ボタン</b>（PCは<b>スペースキー</b>）を押すたびに、時間が進む／止まる。止めている間にじっくり考えられる。</span></div>
     <div><span class="k">🏹</span><span>勇者は射程内の敵を自動で撃つ。コインで<b>強化</b>したり、<b>砦・壁・道</b>を建てたりできる。</span></div>
     <div><span class="k">🧱</span><span>敵は<b>道の上しか進めない</b>。壁でふさぐと攻撃して壊そうとする。砦は矢を撃つが、壊されることもある。</span></div>
     <div><span class="k">🗺</span><span><b>ボスを倒すとマップが広がり</b>、新しい門と道ができる。ドラッグで見る場所を動かし、＋－やピンチで拡大縮小。</span></div>
@@ -380,7 +380,8 @@ S.best=parseInt(store('sas_best')||'0',10)||0;
 var hero={x:720,y:1790,r:20,hp:120,maxHp:120,speed:230,range:230,dmg:10,fireRate:2,cool:0,arrows:1,pierce:0,magnet:90,regen:5,dest:null,path:null,face:1,flash:0,target:null};
 var castle={x:cx(CASTLE_C)+TILE/2,y:cx(CASTLE_R)+TILE/2,r:62,hp:600,maxHp:600,flash:0};
 var enemies=[], shots=[], coins=[], texts=[], parts=[];
-var levels={}, holds=new Set();
+var levels={}, go=false; // go=true の間だけ時間が進む（▶ボタン／スペースキーを押すたびに切り替え）
+function toggleGo(){ if(S.screen!=='play') return; if(S.shopOpen) closeShop(); if(S.buildOpen) closeBuild(); go=!go; }
 var placing=null, selected=null, hover=null;
 
 var TYPES={
@@ -518,11 +519,11 @@ function newGame(){
   castle.hp=600; castle.maxHp=600; castle.flash=0;
   enemies.length=0; shots.length=0; coins.length=0; texts.length=0; parts.length=0;
   S.wave=0; S.coins=40; S.kills=0; S.time=0; S.waveState='clear'; S.spawnQueue=[]; S.spawnTimer=0; S.escapes=0; S.maxWaveDur=0; levels={};
-  holds.clear(); closeShop(); closeBuild(); closeMenu(); placing=null; paintPlacing();
+  go=false; closeShop(); closeBuild(); closeMenu(); placing=null; paintPlacing();
   cam.x=castle.x; cam.y=(region.r0*TILE+(region.r1+1)*TILE)/2; cam.zoom=1; camFollow=true; clampCam();
   S.screen='play';
   $('title').hidden=true; $('over').hidden=true;
-  showBanner('長押しで開始！','タップで移動先。🛠で砦や壁を建てられる');
+  showBanner('▶ かスペースで開始！','タップで移動先。🛠で砦や壁を建てられる');
 }
 function hpMult(n){ return (1+0.12*(n-1))*Math.pow(1.045,n-1); }
 function dmgMult(n){ return (1+0.05*(n-1))*Math.pow(1.03,n-1); }
@@ -556,13 +557,13 @@ function waveClear(){
   // ウェーブクリアで城と建物（砦・壁）は全回復。勇者は回復しない（城のそばで回復する）
   castle.hp=castle.maxHp;
   for(i=0;i<buildList.length;i++) buildList[i].hp=buildList[i].maxHp;
-  S.waveState='clear'; holds.clear();
-  if(S.wave%5===0){ var msg=expandMap(); showBanner('ボス撃破！ '+msg,'🪙 +'+(sum+bonus)+'　長押しで次のウェーブ', true); }
-  else showBanner('WAVE '+S.wave+' クリア！','🪙 +'+(sum+bonus)+'　長押しで次のウェーブ', true);
+  S.waveState='clear'; go=false;
+  if(S.wave%5===0){ var msg=expandMap(); showBanner('ボス撃破！ '+msg,'🪙 +'+(sum+bonus)+'　▶ で次のウェーブ', true); }
+  else showBanner('WAVE '+S.wave+' クリア！','🪙 +'+(sum+bonus)+'　▶ で次のウェーブ', true);
   sfx.clear();
 }
 function gameOver(){
-  S.screen='over'; holds.clear(); closeShop(); closeBuild(); closeMenu(); placing=null; paintPlacing();
+  S.screen='over'; go=false; closeShop(); closeBuild(); closeMenu(); placing=null; paintPlacing();
   if(S.wave>S.best){ S.best=S.wave; store('sas_best',String(S.best)); }
   $('overTitle').textContent=castle.hp<=0?'城が落ちた…':'勇者が倒れた…';
   $('overWave').textContent=S.wave; $('overKills').textContent=S.kills;
@@ -1019,18 +1020,19 @@ function updateHud(running){
   hud.chip.hidden=!play; $('side').hidden=!play; mini.hidden=!play;
   if(play){ setText(hud.chip,'chip',running?'▶ 進んでいます':'⏸ 止まっています'); hud.chip.classList.toggle('go',running); }
   hud.hold.classList.toggle('on',running);
+  setText(hud.hold,'hold',running?'⏸ 止める':'▶ 進む');
   hud.build.classList.toggle('on',!!placing);
   var hint='';
   if(play && !running && !S.shopOpen && !S.buildOpen && !placing && !selected){
-    if(S.waveState==='clear') hint=S.wave===0?'タップで移動先を決めて、長押し（スペース）でスタート':'長押し（スペース）で次のウェーブ';
-    else hint='タップ＝移動先　長押し／スペース＝時間が進む';
+    if(S.waveState==='clear') hint=S.wave===0?'タップで移動先を決めて、▶（スペース）でスタート':'▶（スペース）で次のウェーブ';
+    else hint='タップ＝移動先　▶／スペース＝進む・止まる';
   }
   setText(hud.hint,'hint',hint);
   if(selected && !$('bmenu').hidden) refreshMenuButtons();
 }
 
 // ---- ショップ ----
-function openShop(){ if(S.screen!=='play') return; closeBuild(); closeMenu(); S.shopOpen=true; holds.clear(); renderShop(); $('shop').hidden=false; }
+function openShop(){ if(S.screen!=='play') return; closeBuild(); closeMenu(); S.shopOpen=true; go=false; renderShop(); $('shop').hidden=false; }
 function closeShop(){ S.shopOpen=false; $('shop').hidden=true; }
 function renderShop(){
   var list=$('shopList'); list.innerHTML='';
@@ -1056,7 +1058,7 @@ var BUILD_KINDS=[
   {id:'wall',icon:'🧱',name:'壁',desc:function(){return '道や草地をふさぐ。敵は壊そうと攻撃してくる';}},
   {id:'road',icon:'🛤️',name:'道',desc:function(){return '草地に道を足す（もう一度タップではがす）。敵は近い道を選んで進む';}}
 ];
-function openBuild(){ if(S.screen!=='play') return; closeShop(); closeMenu(); S.buildOpen=true; holds.clear(); renderBuild(); $('build').hidden=false; }
+function openBuild(){ if(S.screen!=='play') return; closeShop(); closeMenu(); S.buildOpen=true; go=false; renderBuild(); $('build').hidden=false; }
 function closeBuild(){ S.buildOpen=false; $('build').hidden=true; }
 function renderBuild(){
   var list=$('buildList'); list.innerHTML='';
@@ -1123,17 +1125,14 @@ canvas.addEventListener('pointerdown',function(e){
   if(e.pointerType==='mouse' && e.button!==0) return;
   e.preventDefault(); ensureAudio();
   try{ canvas.setPointerCapture(e.pointerId); }catch(err){}
-  var p=toLogical(e), rec={x0:p.x,y0:p.y,x:p.x,y:p.y,lx:p.x,ly:p.y,held:false,drag:false,timer:null,key:'field'+e.pointerId};
+  var p=toLogical(e), rec={x0:p.x,y0:p.y,x:p.x,y:p.y,lx:p.x,ly:p.y,drag:false};
   ptrs.set(e.pointerId,rec);
   if(ptrs.size>=2){
     var arr=[]; ptrs.forEach(function(v){arr.push(v);});
-    arr.forEach(function(v){ clearTimeout(v.timer); v.timer=null; v.drag=true; if(v.held){ holds.delete(v.key); v.held=false; } });
+    arr.forEach(function(v){ v.drag=true; });
     pinch={d0:Math.max(1,Math.hypot(arr[0].x-arr[1].x,arr[0].y-arr[1].y)),z0:cam.zoom};
     camFollow=false;
     return;
-  }
-  if(e.pointerType!=='mouse'){
-    rec.timer=setTimeout(function(){ if(ptrs.get(e.pointerId)===rec && !rec.held && !rec.drag){ rec.held=true; holds.add(rec.key); } },180);
   }
 });
 canvas.addEventListener('pointermove',function(e){
@@ -1147,16 +1146,14 @@ canvas.addEventListener('pointermove',function(e){
     setZoom(pinch.z0*d/pinch.d0,mid);
     return;
   }
-  if(rec.held) return;
-  if(!rec.drag && Math.hypot(p.x-rec.x0,p.y-rec.y0)>16){ rec.drag=true; clearTimeout(rec.timer); rec.timer=null; camFollow=false; }
+  if(!rec.drag && Math.hypot(p.x-rec.x0,p.y-rec.y0)>16){ rec.drag=true; camFollow=false; }
   if(rec.drag){ cam.x-=(p.x-rec.lx)/cam.zoom; cam.y-=(p.y-rec.ly)/cam.zoom; clampCam(); }
   rec.lx=p.x; rec.ly=p.y;
 });
 function endPtr(e){
   var rec=ptrs.get(e.pointerId); if(!rec) return;
-  ptrs.delete(e.pointerId); clearTimeout(rec.timer);
-  if(rec.held){ holds.delete(rec.key); }
-  else if(!rec.drag && e.type==='pointerup' && !pinch){ onTap(toLogical(e)); }
+  ptrs.delete(e.pointerId);
+  if(!rec.drag && e.type==='pointerup' && !pinch){ onTap(toLogical(e)); }
   if(ptrs.size<2) pinch=null;
 }
 canvas.addEventListener('pointerup',endPtr);
@@ -1169,21 +1166,19 @@ $('zoomIn').addEventListener('click',function(){ setZoom(cam.zoom*1.25); });
 $('zoomOut').addEventListener('click',function(){ setZoom(cam.zoom/1.25); });
 
 var holdBtn=$('holdBtn');
-holdBtn.addEventListener('pointerdown',function(e){ e.preventDefault(); ensureAudio(); try{ holdBtn.setPointerCapture(e.pointerId); }catch(err){} holds.add('btn'); });
-['pointerup','pointercancel','lostpointercapture'].forEach(function(ev){ holdBtn.addEventListener(ev,function(){ holds.delete('btn'); }); });
-holdBtn.addEventListener('keydown',function(e){ if(e.code==='Space'||e.code==='Enter') e.preventDefault(); });
+holdBtn.addEventListener('click',function(){ ensureAudio(); toggleGo(); holdBtn.blur(); });
+holdBtn.addEventListener('keydown',function(e){ if(e.code==='Space'||e.code==='Enter') e.preventDefault(); }); // スペースはwindow側で1回だけ扱う
 
 window.addEventListener('keydown',function(e){
-  if(e.code==='Space'){ e.preventDefault(); ensureAudio(); if(!e.repeat) holds.add('key'); }
+  if(e.code==='Space'){ e.preventDefault(); ensureAudio(); if(!e.repeat) toggleGo(); }
   else if(e.code==='Escape'){ if(S.shopOpen) closeShop(); else if(S.buildOpen) closeBuild(); else if(placing){ placing=null; paintPlacing(); } else if(selected) closeMenu(); }
   else if(e.key==='b'||e.key==='B'){ if(S.screen==='play'){ if(S.shopOpen) closeShop(); else openShop(); } }
   else if(e.key==='v'||e.key==='V'){ if(S.screen==='play'){ if(S.buildOpen) closeBuild(); else openBuild(); } }
   else if(e.key==='+'||e.key==='='){ setZoom(cam.zoom*1.25); }
   else if(e.key==='-'){ setZoom(cam.zoom/1.25); }
 });
-window.addEventListener('keyup',function(e){ if(e.code==='Space') holds.delete('key'); });
-window.addEventListener('blur',function(){ holds.clear(); });
-document.addEventListener('visibilitychange',function(){ if(document.hidden) holds.clear(); });
+window.addEventListener('blur',function(){ go=false; });
+document.addEventListener('visibilitychange',function(){ if(document.hidden) go=false; });
 
 $('shopBtn').addEventListener('click',function(){ ensureAudio(); if(S.shopOpen) closeShop(); else openShop(); });
 $('shopClose').addEventListener('click',closeShop);
@@ -1201,7 +1196,7 @@ $('titleBest').textContent=S.best>0?'ベスト WAVE '+S.best:'';
 var last=performance.now(), prevRunning=false;
 function frame(t){
   var dt=Math.min(0.05,(t-last)/1000); last=t;
-  var running=S.screen==='play' && !S.shopOpen && !S.buildOpen && holds.size>0;
+  var running=S.screen==='play' && !S.shopOpen && !S.buildOpen && go;
   if(running && !prevRunning) camFollow=true;
   prevRunning=running;
   if(running) update(dt);
@@ -1256,7 +1251,7 @@ function runAuto(){
   var out='AUTO wave='+S.wave+' screen='+S.screen+' time='+t.toFixed(0)+' kills='+S.kills+' hero='+Math.round(hero.hp)+'/'+hero.maxHp+' castle='+Math.round(castle.hp)+'/'+castle.maxHp+' coins='+S.coins+' forts='+fortCount()+' fortLvMax='+buildList.reduce(function(m,b){return b.type==='fort'?Math.max(m,b.lv):m;},0)+'/'+fortMaxLv()+' gates='+gates.length+' stage='+mapStage+' maxWaveDur='+Math.round(S.maxWaveDur||0)+' enemiesLeft='+enemies.length+' escapes='+(S.escapes||0)+' levels='+JSON.stringify(levels);
   document.title=out;
   var pre=document.createElement('pre'); pre.id='simout'; pre.textContent=out; pre.style.cssText='position:fixed;left:0;top:0;z-index:99;background:#000;color:#0f0;font-size:12px;margin:0'; document.body.appendChild(pre);
-  if(qs.has('shot')){ $('over').hidden=true; S.screen='play'; if(qs.has('zoom')) setZoom(parseFloat(qs.get('zoom'))); if(qs.get('shot')==='run') holds.add('auto'); requestAnimationFrame(frame); }
+  if(qs.has('shot')){ $('over').hidden=true; S.screen='play'; if(qs.has('zoom')) setZoom(parseFloat(qs.get('zoom'))); if(qs.get('shot')==='run') go=true; requestAnimationFrame(frame); }
 }
 
 resize();
