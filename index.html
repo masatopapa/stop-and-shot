@@ -46,6 +46,15 @@ body{font-family:var(--font-body);color:var(--paper);-webkit-user-select:none;us
 .overlay .btn.wood{height:72px;padding:0 36px;font-size:26px;color:var(--paper);background:var(--wood);border:3px solid var(--wood-dark);box-shadow:0 5px 0 var(--wood-dark)}
 .cplist{display:grid;gap:12px;width:100%;max-width:440px}
 .cplist .btn{height:72px;font-size:26px;padding:0 20px}
+.seg{display:flex;border-radius:14px;overflow:hidden;border:3px solid var(--wood-dark);box-shadow:0 4px 0 #1a1008}
+.segb{font-family:var(--font-disp);font-weight:900;font-size:22px;line-height:1;padding:14px 22px;border:0;color:var(--paper);background:var(--wood);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.segb.on{background:linear-gradient(#f2d06b,#c9962a);color:#3a2605}
+.segNote{font-size:18px;color:var(--paper);opacity:.8;margin:-8px 0 0}
+/* PC版（横長の広い画面）: 操作まわりだけ中央の720px幅に寄せ、ワールドは画面いっぱいに見せる */
+#stage.pc #bottom,#stage.pc .sheet{left:calc(50% - 360px);right:calc(50% - 360px)}
+#stage.pc #bmenu,#stage.pc #placing{left:calc(50% - 344px);right:calc(50% - 344px)}
+#stage.pc #hint{left:calc(50% - 336px);right:calc(50% - 336px)}
+#stage.pc #mini{width:160px;height:240px}
 
 .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:36px 32px;background:rgba(10,16,12,.86);text-align:center;overflow:auto}
 .overlay h1{font-family:var(--font-disp);font-weight:900;font-size:72px;line-height:1.05;margin:0;color:var(--gold);text-shadow:0 5px 0 var(--wood-dark),0 0 30px rgba(243,200,75,.25);text-wrap:balance}
@@ -162,6 +171,11 @@ body{font-family:var(--font-body);color:var(--paper);-webkit-user-select:none;us
     <div><span class="k">🗺</span><span><b>ボスを倒すとマップが広がり</b>、新しい門と道ができる。ドラッグで見る場所を動かし、＋－やピンチで拡大縮小。</span></div>
     <div><span class="k">🏰</span><span><b>城</b>か<b>勇者</b>の体力がゼロになったら終わり。城のそばにいると勇者は回復する。</span></div>
    </div>
+   <div class="seg" id="viewSeg" role="group" aria-label="画面の種類">
+    <button class="segb" id="viewPhone" type="button">📱 スマホ版</button>
+    <button class="segb" id="viewPc" type="button">🖥 PC版（広い視界）</button>
+   </div>
+   <p class="segNote" id="viewNote">PC版は横長の画面でマップを広く見わたせる</p>
    <button class="btn hold big" id="startBtn" type="button">最初からスタート</button>
    <button class="btn wood" id="contBtn" type="button" hidden>⏩ 続きからスタート</button>
    <p class="best" id="titleBest"></p>
@@ -217,10 +231,12 @@ var scale=1, dpr=1;
 
 // ---- カメラ ----
 var cam={x:720,y:1620,zoom:1}, camFollow=true;
+var SAFE_T=80, SAFE_B=120; // 上のHUDと下のボタン帯ぶん。範囲の端がその下に隠れないようにカメラを寄せる
 function clampCam(){
-  var vw=W/cam.zoom, vh=H/cam.zoom, L=region.c0*TILE, Rt=(region.c1+1)*TILE, T=region.r0*TILE, B=(region.r1+1)*TILE;
+  var vw=W/cam.zoom, L=region.c0*TILE, Rt=(region.c1+1)*TILE, T=region.r0*TILE, B=(region.r1+1)*TILE;
   cam.x=(Rt-L<=vw)?(L+Rt)/2:clamp(cam.x,L+vw/2,Rt-vw/2);
-  cam.y=(B-T<=vh)?(T+B)/2:clamp(cam.y,T+vh/2,B-vh/2);
+  var yMin=T+(H/2-SAFE_T)/cam.zoom, yMax=B-(H/2-SAFE_B)/cam.zoom;
+  cam.y=(yMin>=yMax)?(T+B)/2+(SAFE_B-SAFE_T)/(2*cam.zoom):clamp(cam.y,yMin,yMax);
 }
 function s2w(sx,sy){ return {x:(sx-W/2)/cam.zoom+cam.x, y:(sy-H/2)/cam.zoom+cam.y}; }
 function setZoom(z,sp){
@@ -229,10 +245,17 @@ function setZoom(z,sp){
   else cam.zoom=z;
   clampCam();
 }
+// PC版では使える範囲（region）が丸ごと画面に入る倍率にする（開始時とマップ拡張のたび。＋－で変えられる）
+function fitZoom(){ if(view!=='pc') return; var rw=(region.c1-region.c0+1)*TILE, rh=(region.r1-region.r0+1)*TILE; setZoom(Math.min(W/rw,(H-SAFE_T-SAFE_B)/rh)); }
+// 画面の種類: 'phone'＝幅720固定で縦長（元の形）、'pc'＝高さ1080固定で横長（幅は画面比率に合わせて1080〜2400。マップが広く見える）
+var view=qs.get('view')||store('sas_view')||(window.innerWidth>window.innerHeight?'pc':'phone'); if(view!=='pc') view='phone';
+function setView(v){ view=v==='pc'?'pc':'phone'; store('sas_view',view); stage.classList.toggle('pc',view==='pc'); paintView(); resize(); }
+function paintView(){ $('viewPhone').classList.toggle('on',view!=='pc'); $('viewPc').classList.toggle('on',view==='pc'); }
 function resize(){
   var vw=window.innerWidth, vh=window.visualViewport?window.visualViewport.height:window.innerHeight;
-  H=clamp(Math.round(W*vh/Math.max(1,vw)/2)*2, 1080, 1600);
-  stage.style.height=H+'px'; canvas.style.height=H+'px';
+  if(view==='pc'){ H=1080; W=clamp(Math.round(H*vw/Math.max(1,vh)/2)*2, 1080, 2400); }
+  else { W=720; H=clamp(Math.round(W*vh/Math.max(1,vw)/2)*2, 1080, 1600); }
+  stage.style.width=W+'px'; stage.style.height=H+'px'; canvas.style.width=W+'px'; canvas.style.height=H+'px';
   scale=Math.min(vw/W, vh/H);
   stage.style.transform='scale('+scale+')';
   stage.style.left=Math.floor((vw-W*scale)/2)+'px';
@@ -323,7 +346,7 @@ function expandMap(){
     msg='マップが広がった！ 新しい門と道ができた';
   } else if(gates.length<6){ addGate(pickEdge()); msg='新しい門ができた！'; }
   else { var g2=gates[RI(0,gates.length-1)]; carve(g2.c,g2.r,CASTLE_C,CASTLE_R,adjCastle); msg='新しい道ができた！'; }
-  recomputeFields(); planPath(); clampCam();
+  recomputeFields(); planPath(); clampCam(); fitZoom();
   return msg;
 }
 function resetMap(){
@@ -540,7 +563,7 @@ function newGame(from){ // from: 続きから始めるWAVE（5の倍数。省略
     S.wave=from; S.coins=cps[from]; S.earned=S.coins;
   } else from=0;
   go=false; closeShop(); closeBuild(); closeMenu(); placing=null; paintPlacing();
-  cam.x=castle.x; cam.y=(region.r0*TILE+(region.r1+1)*TILE)/2; cam.zoom=1; camFollow=true; clampCam();
+  cam.x=castle.x; cam.y=(region.r0*TILE+(region.r1+1)*TILE)/2; cam.zoom=1; camFollow=true; clampCam(); fitZoom();
   S.screen='play';
   $('title').hidden=true; $('over').hidden=true; $('cont').hidden=true;
   if(from) showBanner('WAVE '+from+' から再開！','🪙 '+S.coins+'　強化や砦を整えてから ▶ で WAVE '+(from+1), true);
@@ -1211,6 +1234,8 @@ $('buildBtn').addEventListener('click',function(){ ensureAudio(); if(placing){ p
 $('buildClose').addEventListener('click',closeBuild);
 $('startBtn').addEventListener('click',function(){ ensureAudio(); newGame(); });
 $('retryBtn').addEventListener('click',function(){ ensureAudio(); newGame(); });
+$('viewPhone').addEventListener('click',function(){ setView('phone'); });
+$('viewPc').addEventListener('click',function(){ setView('pc'); });
 // 続きから: チェックポイントの一覧（新しいWAVEが上）
 var contFrom='title';
 function paintCont(){ var has=cpWaves().length>0; $('contBtn').hidden=!has; $('contBtn2').hidden=!has; }
@@ -1297,7 +1322,7 @@ function runAuto(){
   if(qs.has('shot')){ $('over').hidden=true; S.screen='play'; if(qs.has('zoom')) setZoom(parseFloat(qs.get('zoom'))); if(qs.get('shot')==='run') go=true; requestAnimationFrame(frame); }
 }
 
-resize();
+setView(view); // 中で resize() も呼ぶ
 if(AUTO){ runAuto(); }
 else { requestAnimationFrame(frame); }
 })();
