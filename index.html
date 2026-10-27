@@ -68,6 +68,8 @@ body{font-family:var(--font-body);color:var(--paper);-webkit-user-select:none;us
 .stats div{font-family:var(--font-disp);font-weight:900;font-size:22px;color:var(--paper)}
 .stats b{display:block;font-size:52px;color:var(--gold);line-height:1.1;font-variant-numeric:tabular-nums}
 .best{font-family:var(--font-disp);font-weight:700;font-size:22px;color:var(--paper);opacity:.85;margin:0}
+.credit{font-family:var(--font-disp);font-weight:700;font-size:20px;color:var(--paper);opacity:.8;margin:0}   /* タイトル画面の一番下: 作った人とプロフィールページへのリンク */
+.credit a{color:var(--gold);text-decoration:underline;text-underline-offset:4px;-webkit-tap-highlight-color:transparent}
 
 #banner{position:absolute;left:24px;right:24px;top:34%;text-align:center;pointer-events:none;font-family:var(--font-disp);font-weight:900;font-size:60px;line-height:1.1;color:#fff;text-shadow:0 4px 0 var(--wood-dark),0 0 24px rgba(0,0,0,.6);animation:pop .45s cubic-bezier(.2,1.4,.4,1) both;text-wrap:balance}
 #banner small{display:block;font-size:28px;margin-top:10px;color:var(--gold)}
@@ -179,6 +181,7 @@ body{font-family:var(--font-body);color:var(--paper);-webkit-user-select:none;us
    <button class="btn hold big" id="startBtn" type="button">最初からスタート</button>
    <button class="btn wood" id="contBtn" type="button" hidden>⏩ 続きからスタート</button>
    <p class="best" id="titleBest"></p>
+   <p class="credit">つくった人：<a href="https://mastopapa.com/profile/" target="_blank" rel="noopener">まさとパパ</a></p>
   </div>
 
   <div id="cont" class="overlay" hidden>
